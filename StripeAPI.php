@@ -18,9 +18,9 @@
 
 6.  Return link, do loop checking:
  
-    $checkout_temp_token = $this->getParamValue('session_id');
-    if(!empty($checkout_temp_token)) {
-        $target_temp = $eshop_order_model->getTempOrderByPayID($checkout_temp_token);
+    $security_checkout_id = $this->getParamValue('sc_id');
+    if(!empty($security_checkout_id)) {
+        $target_temp = $eshop_order_model->getTempOrderByPayID($security_checkout_id);
         if(!empty($target_temp)) {
             $stripe_clientSecret = $this->_setting_model->getByName('stripe_clientSecret');
             require_once(app_path('Libs/payment/StripeAPI.php'));
@@ -33,7 +33,7 @@
                 if($max_loop > 1) {
                     sleep(5);
                 }
-                $payment_status = $stripeAPI->fetchResult($checkout_temp_token, true);
+                $payment_status = $stripeAPI->fetchResult($security_checkout_id, true);
                 $max_loop++;
                 if($payment_status == 'paid' || $payment_status == 'succeeded') {
                     $paid_transaction_id = $stripeAPI->transactionID();
@@ -118,7 +118,7 @@ class StripeAPI {
         \Stripe\Stripe::setApiKey($this->_secret_key);
         
         // custom identification ID, used for comparison with Stripe.
-        $security_checkout_id = 'CS-'.md5(date('YmdHis').$platform.uniqid(rand()));
+        $securityCheckoutID = 'SC-'.md5(date('YmdHis').$platform.uniqid(rand()));
         
         // start processsing
         if(is_array($items) && !empty($items)) {
@@ -141,7 +141,7 @@ class StripeAPI {
                     $totalAmount += $this->_shipping_fee;
                     $items_details['ShippingFee'] = '$'.number_format(round($this->_shipping_fee, 2), 2);
                 }
-                $items_details['securityCheckoutID'] = $security_checkout_id;
+                $items_details['securityCheckoutID'] = $securityCheckoutID;
   
                 $paymentIntent = \Stripe\PaymentIntent::create([
                     'amount'    =>  round($totalAmount * 100),
@@ -153,7 +153,7 @@ class StripeAPI {
                 return [
                     'payID'                 =>  $paymentIntent->id,
                     'clientSecret'          =>  $paymentIntent->client_secret,
-                    'securityCheckoutID'    =>  $security_checkout_id
+                    'securityCheckoutID'    =>  $securityCheckoutID
                 ];
             }
             else if(!empty($this->_return_url) && !empty($this->_cancel_url)) {
@@ -176,11 +176,12 @@ class StripeAPI {
                     'line_items'    =>  $line_items,
                     'discounts'     =>  null,
                     'mode'          =>  'payment',
-                    'success_url'   =>  $this->_return_url.((strpos($this->_return_url, '?') === false)?'?':'&').'session_id='.$security_checkout_id,
-                    'cancel_url'    =>  $this->_cancel_url.((strpos($this->_return_url, '?') === false)?'?':'&').'session_id='.$security_checkout_id,
+                    'success_url'   =>  $this->_return_url.((strpos($this->_return_url, '?') === false)?'?':'&').'sc_id='.$securityCheckoutID,
+                    'cancel_url'    =>  $this->_cancel_url.((strpos($this->_return_url, '?') === false)?'?':'&').'sc_id='.$securityCheckoutID,
+                    'expires_at'    =>  (time() + 30 * 60), // 30 minutes
                     'metadata'      => 
                     [
-                        'securityCheckoutID' => $security_checkout_id
+                        'securityCheckoutID' => $securityCheckoutID
                     ]
                 ];
 
@@ -221,7 +222,7 @@ class StripeAPI {
                 [
                     'payID'                 =>  $checkout_session->id,  // e.g., cs_test_b1dcM72EiT6klc7zMCqmJB8hFusgVgseqHmWmGzHKcFh3cuju97oRs2uaG,
                     'payUrl'                =>  $checkout_session->url,
-                    'securityCheckoutID'    =>  $security_checkout_id
+                    'securityCheckoutID'    =>  $securityCheckoutID
                 ];
             }
         }
